@@ -99,13 +99,21 @@ Examples:
   notebooklm ask "Compare to Vue" --notebook my-react-docs
 
 Resolution order:
-  1. --session flag (explicit)
-  2. Active session (from `session select`)
-  3. New auto-generated session
+  Session:
+    1. --session flag (explicit)
+    2. Active session (from `session select`) - if not stale
+    3. New auto-generated session (becomes new sticky if auto_rotate enabled)
 
-  1. --notebook flag (explicit)
-  2. Active notebook (from `notebook select`)
-  3. Error if none set
+  Notebook:
+    1. --notebook flag (explicit)
+    2. Active notebook (from `notebook select`)
+    3. Error if none set
+
+  Auto-rotate behavior:
+    - If active session last used > auto_rotate_after (default 30m)
+    - Creates new session automatically
+    - New session becomes the sticky session
+    - Old session remains available (not closed)
 ```
 
 ### Notebook Commands
@@ -469,6 +477,8 @@ session:
   max_concurrent: 10
   timeout: 15m
   cleanup_interval: 60s
+  auto_rotate: true              # Auto-rotate sticky session when stale
+  auto_rotate_after: 30m         # Create new session if last response > 30min ago
 
 # Authentication
 auth:
@@ -503,6 +513,8 @@ NOTEBOOKLM_HEADLESS=true
 NOTEBOOKLM_TIMEOUT=30s
 NOTEBOOKLM_MAX_SESSIONS=10
 NOTEBOOKLM_SESSION_TIMEOUT=15m
+NOTEBOOKLM_SESSION_AUTO_ROTATE=true
+NOTEBOOKLM_SESSION_AUTO_ROTATE_AFTER=30m
 NOTEBOOKLM_AUTO_LOGIN=false
 NOTEBOOKLM_EMAIL=user@example.com
 NOTEBOOKLM_PASSWORD=secret
@@ -699,6 +711,13 @@ useContext is a Hook that lets you subscribe to React context...
 $ notebooklm ask "How does Vue handle state?" --notebook vue-docs
 Vue uses reactive data properties and the Composition API...
 [Session: auto-abc123]
+
+# Auto-rotate example (after 30+ min of inactivity)
+$ notebooklm ask "What changed in React 19?"
+[Auto-rotated: session auto-7f3k2m was stale (45m)]
+React 19 introduces several improvements...
+[Session: auto-qw3rt5, Messages: 1]
+# New session auto-qw3rt5 is now the sticky session
 
 # Output as JSON
 $ notebooklm ask "List all hooks" --format json
