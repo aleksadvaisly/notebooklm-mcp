@@ -91,11 +91,21 @@ Flags:
   --url string         Direct NotebookLM URL
   --show-browser       Show browser window
   --format string      Output format: text|json|markdown (default: text)
+  --new-session        Force new session (ignore active)
 
 Examples:
   notebooklm ask "Explain useState"
   notebooklm ask "How does useEffect work?" --session react-hooks
   notebooklm ask "Compare to Vue" --notebook my-react-docs
+
+Resolution order:
+  1. --session flag (explicit)
+  2. Active session (from `session select`)
+  3. New auto-generated session
+
+  1. --notebook flag (explicit)
+  2. Active notebook (from `notebook select`)
+  3. Error if none set
 ```
 
 ### Notebook Commands
@@ -130,14 +140,18 @@ notebooklm session [command]
 
 Commands:
   list        List active sessions
+  select      Set active session (sticky)
   close       Close a session
   reset       Reset session (clear history)
   cleanup     Clean up all inactive sessions
+  current     Show current active session
 
 Examples:
   notebooklm session list
+  notebooklm session select react-session   # set as default
   notebooklm session close react-session
   notebooklm session reset react-session
+  notebooklm session current
 ```
 
 ### Auth Commands
@@ -400,9 +414,20 @@ type NotebookEntry struct {
 }
 
 type Library struct {
-    Notebooks      map[string]*NotebookEntry `json:"notebooks"`
-    ActiveID       string                    `json:"active_id"`
-    storagePath    string
+    Notebooks         map[string]*NotebookEntry `json:"notebooks"`
+    ActiveNotebookID  string                    `json:"active_notebook_id"`
+    ActiveSessionID   string                    `json:"active_session_id"`
+    storagePath       string
+}
+
+func (l *Library) SetActiveSession(sessionID string) error {
+    l.ActiveSessionID = sessionID
+    return l.Save()
+}
+
+func (l *Library) ClearActiveSession() error {
+    l.ActiveSessionID = ""
+    return l.Save()
 }
 
 func (l *Library) Add(entry *NotebookEntry) error {
@@ -623,7 +648,7 @@ require (
 
 ## Usage Examples
 
-### Interactive Session
+### Interactive Session (Sticky Context)
 
 ```bash
 # Setup authentication
@@ -638,17 +663,42 @@ $ notebooklm notebook add \
   --topics "React,Hooks,Components,State"
 Added notebook: react-documentation (id: react-doc-abc)
 
-# Select as active
+# Set active notebook (sticky)
 $ notebooklm notebook select react-doc-abc
 Active notebook set to: React Documentation
 
-# Ask questions
+# First question - creates new session
 $ notebooklm ask "What is useState and how do I use it?"
 useState is a React Hook that lets you add state to functional components...
+[Session: auto-7f3k2m]
 
-# Continue conversation in same session
-$ notebooklm ask "How does it compare to useReducer?" --session react-hooks
+# Set this session as active (sticky)
+$ notebooklm session select auto-7f3k2m
+Active session set to: auto-7f3k2m
+
+# Now all questions use active notebook + active session automatically
+$ notebooklm ask "How does it compare to useReducer?"
 While useState is simpler for individual state values, useReducer is better for...
+[Session: auto-7f3k2m, Messages: 2]
+
+$ notebooklm ask "Show me an example with both"
+Here's an example combining useState and useReducer...
+[Session: auto-7f3k2m, Messages: 3]
+
+# Check current context
+$ notebooklm session current
+Active notebook: React Documentation (react-doc-abc)
+Active session: auto-7f3k2m (3 messages)
+
+# Force new session (ignore sticky)
+$ notebooklm ask "What is useContext?" --new-session
+useContext is a Hook that lets you subscribe to React context...
+[Session: auto-9x8y1z]
+
+# Switch to different notebook temporarily
+$ notebooklm ask "How does Vue handle state?" --notebook vue-docs
+Vue uses reactive data properties and the Composition API...
+[Session: auto-abc123]
 
 # Output as JSON
 $ notebooklm ask "List all hooks" --format json
@@ -656,8 +706,9 @@ $ notebooklm ask "List all hooks" --format json
   "status": "success",
   "question": "List all hooks",
   "answer": "React provides several built-in hooks...",
-  "session_id": "react-hooks",
-  "message_count": 3
+  "session_id": "auto-7f3k2m",
+  "notebook_id": "react-doc-abc",
+  "message_count": 4
 }
 ```
 
